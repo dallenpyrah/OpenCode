@@ -1,0 +1,28 @@
+[package]
+name = "opencode"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.98"
+async-trait = "0.1.88"
+clap = { version = "4.5.36", features = ["derive"] }
+crossterm = "0.29.0"
+dialoguer = "0.11.0"
+dirs = "6.0.0"
+indicatif = "0.17.11"
+jsonschema = "0.29.1"
+keyring = "3.6.2"
+reqwest = { version = "0.12.15", features = ["json"] }
+rpassword = "7.3.1"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+similar = "2.7.0"
+syntect = "5.2.0"
+syntect-assets = "0.23.6"
+thiserror = "2.0.12"
+tiktoken-rs = "0.6.0"
+tokio = { version = "1.44.2", features = ["full"] }
+toml = "0.8.20"
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
