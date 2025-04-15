@@ -7,13 +7,14 @@ edition = "2021"
 anyhow = "1.0.98"
 async-trait = "0.1.88"
 clap = { version = "4.5.36", features = ["derive"] }
+log = "0.4"
 crossterm = "0.29.0"
 dialoguer = "0.11.0"
 dirs = "6.0.0"
 indicatif = "0.17.11"
 jsonschema = "0.29.1"
 keyring = "3.6.2"
-reqwest = { version = "0.12.15", features = ["json"] }
+reqwest = { version = "0.12.15", features = ["json", "stream"] }
 rpassword = "7.3.1"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
@@ -26,3 +27,19 @@ tokio = { version = "1.44.2", features = ["full"] }
 toml = "0.8.20"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+env_logger = "0.11"
+bytes = "1.6.1"
+futures-util = "0.3.30"
+tokio-stream = "0.1.15"
+termimad = "0.26"
+rustyline = "14.0"
+tree-sitter = "0.22.6"
+tree-sitter-rust = "0.21.0"
+walkdir = "2.5.0"
+rust_search = "2.1.0"
+
+[dev-dependencies]
+mockito = "1.4.0"
+assert_cmd = "2.0"
+predicates = "3.1"
+tempfile = "3.10"

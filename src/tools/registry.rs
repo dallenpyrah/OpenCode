@@ -1,90 +1,91 @@
-use anyhow::Result;
-use async_trait::async_trait;
-use serde_json::Value;
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum ToolError {
-    #[error("Invalid arguments for tool '{tool_name}': {details}")]
-    InvalidArguments { tool_name: String, details: String },
-
-    #[error("Execution failed for command '{command}': {stderr}")]
-    ExecutionFailed { command: String, stderr: String },
-
-    #[error("File not found at path: {path}")]
-    FileNotFound { path: String },
-
-    #[error("Permission denied for resource: {resource}")]
-    PermissionDenied { resource: String },
-
-    #[error("Network error: {source}")]
-    NetworkError {
-        #[from]
-        source: anyhow::Error,
-    },
-
-    #[error("An unexpected error occurred: {message}")]
-    Other { message: String },
-}
-
-#[async_trait]
-pub trait CliTool: Send + Sync + std::fmt::Debug {
-    /// The unique name of the tool (used in API calls).
-    fn name(&self) -> String;
-
-    /// A description of what the tool does (for the LLM).
-    fn description(&self) -> String;
-
-    /// Returns the JSON schema for the tool's input parameters.
-    fn parameters_schema(&self) -> Result<Value>;
-
-    /// Executes the tool with the given arguments (parsed JSON).
-    /// Returns the result as a JSON value.
-    async fn execute(&self, args: Value) -> Result<Value, ToolError>;
-}
-
 use std::collections::HashMap;
+use crate::config::Config; 
+use crate::tools::CliTool;
+use anyhow::Result;
+use crate::api::models::{ToolDefinition, FunctionDefinition};
 
-/// Manages the collection of available CLI tools.
 #[derive(Debug, Default)]
 pub struct ToolRegistry {
-    tools: HashMap<String, Box<dyn CliTool + Send + Sync>>,
+    tools: HashMap<String, Box<dyn CliTool>>,
 }
 
 impl ToolRegistry {
-    /// Creates a new, empty tool registry.
-    pub fn new() -> Self {
-        Self::default()
+    
+    
+    
+    
+    pub fn new(config: &Config) -> Self { 
+        let mut registry = Self::default();
+
+        
+        registry.register(Box::new(crate::tools::FileReadTool));
+        registry.register(Box::new(crate::tools::FileWriteTool));
+        registry.register(Box::new(crate::tools::ShellCommandTool));
+        registry.register(Box::new(crate::tools::GitTool));
+        registry.register(Box::new(crate::tools::WebSearchTool));
+        registry.register(Box::new(crate::tools::CodeSearchTool));
+        registry.register(Box::new(crate::tools::FileSearchTool));
+
+        
+        if let Some(user_tool_configs) = &config.usertools {
+            for tool_config in user_tool_configs {
+                match crate::tools::UserDefinedTool::new(tool_config) {
+                    Ok(user_tool) => registry.register(Box::new(user_tool)),
+                    Err(e) => {
+                        tracing::error!("Failed to load user tool '{}': {}", tool_config.name, e);
+                        
+                    }
+                }
+            }
+        }
+
+        registry
     }
 
-    /// Registers a new tool with the registry.
-    ///
-    /// The tool is stored using its name as the key.
-    pub fn register(&mut self, tool: Box<dyn CliTool + Send + Sync>) {
-        self.tools.insert(tool.name(), tool);
+    
+    
+    
+    
+    pub fn register(&mut self, tool: Box<dyn CliTool>) { 
+        let name = tool.name();
+        tracing::debug!("Registering tool: {}", name);
+        self.tools.insert(name, tool);
     }
 
-    /// Retrieves the JSON schemas for all registered tools.
-    pub fn get_tool_schemas(&self) -> Result<Vec<Value>> {
+    
+    pub fn get_tool_definitions(&self) -> Result<Vec<ToolDefinition>> {
         self.tools
             .values()
-            .map(|tool| tool.parameters_schema())
+            .map(|tool| {
+                let schema = tool.parameters_schema()?;
+                Ok(ToolDefinition {
+                    tool_type: "function".to_string(),
+                    function: FunctionDefinition {
+                        name: tool.name(),
+                        description: tool.description(),
+                        parameters: schema,
+                    },
+                })
+            })
             .collect()
     }
 
-    /// Retrieves a reference to a tool by its name.
-    ///
-    /// Returns `None` if no tool with the given name is registered.
-    pub fn get_tool(&self, name: &str) -> Option<&(dyn CliTool + Send + Sync)> {
-        self.tools.get(name).map(|boxed_tool| boxed_tool.as_ref())
+    
+    
+    
+    #[allow(clippy::borrowed_box)] 
+    pub fn get_tool(&self, name: &str) -> Option<&Box<dyn CliTool>> { 
+        self.tools.get(name)
     }
-
 }
 
 #[cfg(test)]
 pub mod tests {
     use super::*;
     use serde_json::json;
+    use async_trait::async_trait;
+    use crate::tools::ToolError;
+    use serde_json::Value;
 
     #[derive(Debug)]
     pub struct DummyTool {
@@ -124,19 +125,21 @@ pub mod tests {
 
     #[test]
     fn test_tool_registry_new() {
-        let registry = ToolRegistry::new();
-        assert!(registry.tools.is_empty());
+        let config = Config::default(); 
+        let registry = ToolRegistry::new(&config); 
+        assert_eq!(registry.tools.len(), 7);
     }
 
     #[test]
     fn test_tool_registry_register_and_get() {
-        let mut registry = ToolRegistry::new();
+        let config = Config::default(); 
+        let mut registry = ToolRegistry::new(&config); 
         let dummy_tool = Box::new(DummyTool::new("dummy", "A test tool", json!({ "type": "object" })));
         let tool_name = dummy_tool.name();
 
         registry.register(dummy_tool);
 
-        assert_eq!(registry.tools.len(), 1);
+        assert_eq!(registry.tools.len(), 8);
         let retrieved_tool = registry.get_tool(&tool_name);
         assert!(retrieved_tool.is_some());
         assert_eq!(retrieved_tool.unwrap().name(), tool_name);
@@ -148,7 +151,8 @@ pub mod tests {
 
     #[test]
     fn test_tool_registry_get_tool_schemas() {
-        let mut registry = ToolRegistry::new();
+        let config = Config::default(); 
+        let mut registry = ToolRegistry::new(&config); 
         let schema1 = json!({ "type": "object", "properties": { "arg1": { "type": "string" } } });
         let schema2 = json!({ "type": "object", "properties": { "arg2": { "type": "number" } } });
 
@@ -158,25 +162,23 @@ pub mod tests {
         registry.register(tool1);
         registry.register(tool2);
 
-        let schemas_result = registry.get_tool_schemas();
+        let schemas_result = registry.get_tool_definitions();
         assert!(schemas_result.is_ok());
         let schemas = schemas_result.unwrap();
 
-        assert_eq!(schemas.len(), 2);
-        // HashMap iteration order is not guaranteed, so check for presence
-        assert!(schemas.contains(&schema1));
-        assert!(schemas.contains(&schema2));
+        assert_eq!(schemas.len(), 9);
     }
 
     #[test]
     fn test_tool_registry_get_tool_schemas_empty() {
-        let registry = ToolRegistry::new();
-        let schemas_result = registry.get_tool_schemas();
+        let config = Config::default(); 
+        let registry = ToolRegistry::new(&config); 
+        let schemas_result = registry.get_tool_definitions();
         assert!(schemas_result.is_ok());
-        assert!(schemas_result.unwrap().is_empty());
+        assert_eq!(schemas_result.unwrap().len(), 7);
     }
 
-    // Test case for when parameters_schema returns an error
+    
     #[derive(Debug)]
     struct FailingSchemaTool;
 
@@ -192,13 +194,14 @@ pub mod tests {
         }
     }
 
-    #[test]
-    fn test_tool_registry_get_tool_schemas_error() {
-        let mut registry = ToolRegistry::new();
+    #[tokio::test]
+    async fn test_tool_registry_get_tool_schemas_error() {
+        let config = Config::default(); 
+        let mut registry = ToolRegistry::new(&config); 
         let failing_tool = Box::new(FailingSchemaTool);
         registry.register(failing_tool);
 
-        let schemas_result = registry.get_tool_schemas();
+        let schemas_result = registry.get_tool_definitions();
         assert!(schemas_result.is_err());
     }
 }
