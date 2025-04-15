@@ -1,0 +1,36 @@
+# Rust build
+/target/
+**/*.rs.bk
+
+# IDE and editor
+.idea/
+*.swp
+*.swo
+*.bak
+*.tmp
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+*.log
+*.env
+Cargo.lock
+
+# Coverage
+/coverage/
+*.profraw
+
+# Node/npm (in case of mixed projects)
+node_modules/
+
+# Python (if any)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# By default, do not ignore Cargo.lock for libraries, but ignore for binaries/apps
+# Remove Cargo.lock from ignore if this is a library
