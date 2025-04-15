@@ -1,4 +1,7 @@
 pub mod registry;
+pub mod code_intelligence;
+pub mod command_execution;
+pub mod web_search;
 pub mod tool_result_format;
 use crate::config::UserToolConfig;
 pub mod execution;
@@ -10,7 +13,8 @@ use serde_json::Value;
 use tracing;
 use std::process::Command;
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::fs;
 
 #[derive(Debug, Error)]
 pub enum ToolError {
@@ -56,6 +60,15 @@ pub struct CodeSearchTool;
 
 #[derive(Debug)]
 pub struct FileSearchTool;
+
+#[derive(Debug)]
+pub struct CreateDirectoryTool;
+
+#[derive(Debug)]
+pub struct DeleteTool;
+
+#[derive(Debug)]
+pub struct ListFilesTool;
 
 #[derive(Debug)]
 pub struct UserDefinedTool {
@@ -547,6 +560,223 @@ impl CliTool for FileSearchTool {
                 }
             }))
         }
+    }
+}
+
+// --- New Tool Implementations ---
+
+#[async_trait]
+impl CliTool for CreateDirectoryTool {
+    fn name(&self) -> String {
+        "CreateDirectoryTool".to_string()
+    }
+
+    fn description(&self) -> String {
+        "Creates a directory (including parent directories if necessary). Args: {\"path\": string}".to_string()
+    }
+
+    fn parameters_schema(&self) -> Result<Value> {
+        Ok(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "path": { "type": "string", "description": "The path of the directory to create." }
+            },
+            "required": ["path"]
+        }))
+    }
+
+    async fn execute(&self, args: Value) -> Result<Value, ToolError> {
+        let path_str = args.get("path").and_then(|v| v.as_str()).ok_or_else(|| ToolError::InvalidArguments {
+            tool_name: self.name(),
+            details: "Missing or invalid 'path' argument".to_string(),
+        })?;
+
+        let path = Path::new(path_str);
+
+        fs::create_dir_all(path).map_err(|e| {
+            tracing::error!("Failed to create directory '{}': {}", path_str, e);
+            if e.kind() == std::io::ErrorKind::PermissionDenied {
+                ToolError::PermissionDenied { resource: path_str.to_string() }
+            } else {
+                ToolError::Other { message: format!("Failed to create directory '{}': {}", path_str, e) }
+            }
+        })?;
+
+        tracing::info!("Successfully created directory: {}", path_str);
+        Ok(serde_json::json!({ "status": "success", "path": path_str }))
+    }
+}
+
+#[async_trait]
+impl CliTool for DeleteTool {
+    fn name(&self) -> String {
+        "DeleteTool".to_string()
+    }
+
+    fn description(&self) -> String {
+        "Deletes a file or directory. Args: {\"path\": string, \"recursive\": boolean (optional, default false)}".to_string()
+    }
+
+    fn parameters_schema(&self) -> Result<Value> {
+        Ok(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "path": { "type": "string", "description": "The path of the file or directory to delete." },
+                "recursive": { "type": "boolean", "description": "Whether to delete directories recursively (default: false). Required if path is a directory.", "default": false }
+            },
+            "required": ["path"]
+        }))
+    }
+
+    async fn execute(&self, args: Value) -> Result<Value, ToolError> {
+        let path_str = args.get("path").and_then(|v| v.as_str()).ok_or_else(|| ToolError::InvalidArguments {
+            tool_name: self.name(),
+            details: "Missing or invalid 'path' argument".to_string(),
+        })?;
+        let recursive = args.get("recursive").and_then(|v| v.as_bool()).unwrap_or(false);
+
+        let path = Path::new(path_str);
+
+        if !path.exists() {
+            return Err(ToolError::FileNotFound { path: path_str.to_string() });
+        }
+
+        let metadata = fs::metadata(path).map_err(|e| ToolError::Other {
+            message: format!("Failed to get metadata for '{}': {}", path_str, e),
+        })?;
+
+        if metadata.is_dir() {
+            if recursive {
+                fs::remove_dir_all(path).map_err(|e| {
+                    tracing::error!("Failed to recursively delete directory '{}': {}", path_str, e);
+                    if e.kind() == std::io::ErrorKind::PermissionDenied {
+                        ToolError::PermissionDenied { resource: path_str.to_string() }
+                    } else {
+                        ToolError::Other { message: format!("Failed to delete directory '{}': {}", path_str, e) }
+                    }
+                })?;
+                tracing::info!("Successfully deleted directory recursively: {}", path_str);
+            } else {
+                match fs::remove_dir(path) {
+                    Ok(_) => {
+                        tracing::info!("Successfully deleted empty directory: {}", path_str);
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::DirectoryNotEmpty => {
+                         return Err(ToolError::InvalidArguments {
+                            tool_name: self.name(),
+                            details: format!("Directory '{}' is not empty. Use 'recursive: true' to delete.", path_str),
+                        });
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to delete directory '{}': {}", path_str, e);
+                        return Err(if e.kind() == std::io::ErrorKind::PermissionDenied {
+                            ToolError::PermissionDenied { resource: path_str.to_string() }
+                        } else {
+                            ToolError::Other { message: format!("Failed to delete directory '{}': {}", path_str, e) }
+                        });
+                    }
+                }
+            }
+        } else {
+            fs::remove_file(path).map_err(|e| {
+                tracing::error!("Failed to delete file '{}': {}", path_str, e);
+                if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    ToolError::PermissionDenied { resource: path_str.to_string() }
+                } else {
+                    ToolError::Other { message: format!("Failed to delete file '{}': {}", path_str, e) }
+                }
+            })?;
+            tracing::info!("Successfully deleted file: {}", path_str);
+        }
+
+        Ok(serde_json::json!({ "status": "success", "path": path_str }))
+    }
+}
+
+#[async_trait]
+impl CliTool for ListFilesTool {
+    fn name(&self) -> String {
+        "ListFilesTool".to_string()
+    }
+
+    fn description(&self) -> String {
+        "Lists files and directories within a given path. Args: {\"path\": string, \"recursive\": boolean (optional, default false)}".to_string()
+    }
+
+    fn parameters_schema(&self) -> Result<Value> {
+        Ok(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "path": { "type": "string", "description": "The path of the directory to list." },
+                "recursive": { "type": "boolean", "description": "Whether to list files recursively (default: false).", "default": false }
+            },
+            "required": ["path"]
+        }))
+    }
+
+    async fn execute(&self, args: Value) -> Result<Value, ToolError> {
+        let path_str = args.get("path").and_then(|v| v.as_str()).ok_or_else(|| ToolError::InvalidArguments {
+            tool_name: self.name(),
+            details: "Missing or invalid 'path' argument".to_string(),
+        })?;
+        let recursive = args.get("recursive").and_then(|v| v.as_bool()).unwrap_or(false);
+
+        let start_path = PathBuf::from(path_str);
+
+        if !start_path.exists() {
+            return Err(ToolError::FileNotFound { path: path_str.to_string() });
+        }
+        if !start_path.is_dir() {
+             return Err(ToolError::InvalidArguments {
+                tool_name: self.name(),
+                details: format!("Path '{}' is not a directory.", path_str),
+            });
+        }
+
+        let mut entries = Vec::new();
+        let mut dirs_to_visit = vec![start_path.clone()];
+
+        while let Some(current_dir) = dirs_to_visit.pop() {
+            let read_dir = fs::read_dir(&current_dir).map_err(|e| {
+                tracing::warn!("Failed to read directory '{}': {}", current_dir.display(), e);
+                if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    ToolError::PermissionDenied { resource: current_dir.to_string_lossy().to_string() }
+                } else {
+                    ToolError::Other { message: format!("Error reading directory '{}': {}", current_dir.display(), e) }
+                }
+            })?;
+
+            for entry_result in read_dir {
+                match entry_result {
+                    Ok(entry) => {
+                        let path = entry.path();
+                        let relative_path = path.strip_prefix(&start_path).unwrap_or(&path);
+                        let path_string = relative_path.to_string_lossy().to_string();
+
+                        if !recursive && path == start_path {
+                            continue;
+                        }
+                        if !path_string.is_empty() {
+                           entries.push(path_string);
+                        }
+
+                        if recursive && path.is_dir() {
+                            dirs_to_visit.push(path);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to process directory entry in '{}': {}", current_dir.display(), e);
+                    }
+                }
+            }
+            if !recursive {
+                break;
+            }
+        }
+
+        entries.sort();
+
+        Ok(serde_json::json!({ "entries": entries }))
     }
 }
 

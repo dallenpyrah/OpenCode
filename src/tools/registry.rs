@@ -3,6 +3,10 @@ use crate::config::Config;
 use crate::tools::CliTool;
 use anyhow::Result;
 use crate::api::models::{ToolDefinition, FunctionDefinition};
+use crate::tools::code_intelligence::ListCodeDefinitionsTool;
+use crate::tools::command_execution::ExecuteCommandTool;
+
+use crate::tools::web_search::WebSearchTool;
 
 #[derive(Debug, Default)]
 pub struct ToolRegistry {
@@ -17,16 +21,20 @@ impl ToolRegistry {
     pub fn new(config: &Config) -> Self { 
         let mut registry = Self::default();
 
-        
         registry.register(Box::new(crate::tools::FileReadTool));
         registry.register(Box::new(crate::tools::FileWriteTool));
         registry.register(Box::new(crate::tools::ShellCommandTool));
         registry.register(Box::new(crate::tools::GitTool));
-        registry.register(Box::new(crate::tools::WebSearchTool));
+        registry.register(Box::new(WebSearchTool));
         registry.register(Box::new(crate::tools::CodeSearchTool));
         registry.register(Box::new(crate::tools::FileSearchTool));
+        registry.register(Box::new(crate::tools::CreateDirectoryTool));
+        registry.register(Box::new(crate::tools::DeleteTool));
+        registry.register(Box::new(crate::tools::ListFilesTool));
 
-        
+        registry.register(Box::new(ListCodeDefinitionsTool));
+        registry.register(Box::new(ExecuteCommandTool));
+
         if let Some(user_tool_configs) = &config.usertools {
             for tool_config in user_tool_configs {
                 match crate::tools::UserDefinedTool::new(tool_config) {
@@ -127,7 +135,7 @@ pub mod tests {
     fn test_tool_registry_new() {
         let config = Config::default(); 
         let registry = ToolRegistry::new(&config); 
-        assert_eq!(registry.tools.len(), 7);
+        assert_eq!(registry.tools.len(), 12);
     }
 
     #[test]
@@ -139,7 +147,7 @@ pub mod tests {
 
         registry.register(dummy_tool);
 
-        assert_eq!(registry.tools.len(), 8);
+        assert_eq!(registry.tools.len(), 13);
         let retrieved_tool = registry.get_tool(&tool_name);
         assert!(retrieved_tool.is_some());
         assert_eq!(retrieved_tool.unwrap().name(), tool_name);
@@ -166,7 +174,7 @@ pub mod tests {
         assert!(schemas_result.is_ok());
         let schemas = schemas_result.unwrap();
 
-        assert_eq!(schemas.len(), 9);
+        assert_eq!(schemas.len(), 14);
     }
 
     #[test]
@@ -175,7 +183,7 @@ pub mod tests {
         let registry = ToolRegistry::new(&config); 
         let schemas_result = registry.get_tool_definitions();
         assert!(schemas_result.is_ok());
-        assert_eq!(schemas_result.unwrap().len(), 7);
+        assert_eq!(schemas_result.unwrap().len(), 12);
     }
 
     

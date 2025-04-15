@@ -27,6 +27,9 @@ pub struct Config {
 
     #[serde(default)]
     pub usertools: Option<Vec<UserToolConfig>>,
+
+    #[serde(skip)]
+    brave_search_api_key: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)] 
@@ -73,11 +76,11 @@ impl Default for ApiConfig {
         }
     }
 }
-
 impl Config {
     
     
     pub fn load() -> Result<Self> {
+        dotenvy::dotenv().ok();
         let global_config = load_global_config()?;
         let project_config = load_project_config()?;
 
@@ -121,10 +124,27 @@ impl Config {
             tracing::debug!("OPENCODE_EDIT_MODEL environment variable not set, using config/default value: {}", config.api.edit_model);
         }
 
-        Ok(config)
-    }
+        match env::var("BRAVE_SEARCH_API_KEY") {
+            Ok(key) if !key.is_empty() => {
+                tracing::info!("Using Brave Search API key from BRAVE_SEARCH_API_KEY environment variable.");
+                config.brave_search_api_key = Some(key);
+            }
+            Ok(_) => {
+                tracing::warn!("BRAVE_SEARCH_API_KEY environment variable is set but empty.");
+            }
+            Err(env::VarError::NotPresent) => {
+                tracing::debug!("BRAVE_SEARCH_API_KEY environment variable not found.");
+            }
+            Err(e) => {
+                tracing::error!("Error reading BRAVE_SEARCH_API_KEY environment variable: {}", e);
+            }
+        }
+Ok(config)
+}
 
-    
+// Removed unused brave_search_api_key method
+
+
     pub fn get_api_key(&self) -> Result<Option<String>> {
         
         match env::var("OPENROUTER_API_KEY") {
