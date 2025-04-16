@@ -52,11 +52,13 @@
 - [x] Task 4.6: Implement Tool Result Formatting
   - [x] Task 4.6.1: Implement `format_tool_result` function
   - [x] Task 4.6.2: Construct API-specific result JSON
-- [ ] Task 4.7: Integrate Tool Cycle into API Flow
+  - [x] Improve markdown detection for LLM outputed code output in responses (print_result).
+- [x] Task 4.7: Integrate Tool Cycle into API Flow
   - [x] Task 4.7.1: Include tool schemas in API requests
   - [x] Task 4.7.2: Invoke `execute_tool_call` for responses
   - [x] Task 4.7.3: Collect formatted results
   - [x] Task 4.7.4: Append results to conversation history
+- [x] Add tests for print_result and code detection.
 
 ## Phase 5: Core AI Features & Agentic Workflow
 - [x] Task 5.1: Implement Code Generation Command

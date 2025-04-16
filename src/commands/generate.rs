@@ -60,7 +60,7 @@ pub async fn handle_generate(
     let request = ChatCompletionRequest {
         model: config.api.big_model.clone(),
         messages: vec![user_message],
-        stream: None,
+        stream: Some(true),
         temperature: None,
         max_tokens: None,
         tools: None,

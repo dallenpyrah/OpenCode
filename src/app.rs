@@ -4,6 +4,7 @@ use clap::Parser;
 use std::fs;
 use std::path::{Path, PathBuf};
 use serde_json::json;
+// Removed tokio::sync::mpsc import
 use tracing_subscriber::{fmt, EnvFilter};
 
 use crate::api::client::ApiClient;
@@ -12,7 +13,7 @@ use crate::config::Config;
 use crate::context::ContextManager;
 use crate::tools::execution::{SecurityPolicy, ToolExecutionEngine};
 use crate::tools::registry::ToolRegistry;
-// Removed tui imports
+// Removed TUI imports
 
 // Import command handlers (assuming they exist in submodules)
 use crate::commands::{
@@ -75,55 +76,59 @@ pub async fn run() -> Result<()> {
 
     tracing::info!("Application started");
 
+    // Reverted: Removed terminal initialization and TUI app setup
+
+    // Reverted: Command handling logic runs directly, not in a separate task
     let cli = Cli::parse();
-
     let config = Config::load().context("Failed to load configuration")?;
-
-    let context_manager = ContextManager::new(config.clone())?; // Removed mut
-
+    let context_manager = ContextManager::new(config.clone())?;
     let tool_registry = ToolRegistry::new(&config);
     let tool_engine = ToolExecutionEngine::new(&tool_registry, SecurityPolicy::ConfirmWrites);
 
-    if let Some(command) = cli.command {
+    let command_result = if let Some(command) = cli.command {
         match command {
             Commands::Configure(args) => {
-                handle_configure(config, args).await?;
+                handle_configure(config, args).await
             }
             Commands::Ask { prompt } => {
-                handle_ask(config, context_manager, &tool_registry, &tool_engine, prompt).await?;
+                handle_ask(config, context_manager, &tool_registry, &tool_engine, prompt).await
             }
             Commands::Generate(args) => {
-                handle_generate(config, args).await?;
+                handle_generate(config, args).await
             }
             Commands::Explain(args) => {
-                handle_explain(config, args).await?;
+                handle_explain(config, args).await
             }
             Commands::Edit(args) => {
-                handle_edit(config, &tool_registry, &tool_engine, args).await?;
+                handle_edit(config, &tool_registry, &tool_engine, args).await
             }
             Commands::Debug(args) => {
-                handle_debug(config, args).await?;
+                handle_debug(config, args).await
             }
             Commands::Test(args) => {
-                handle_test(config, args).await?;
+                handle_test(config, args).await
             }
             Commands::Doc(args) => {
-                handle_doc(config, args).await?;
+                handle_doc(config, args).await
             }
             Commands::Run(args) => {
-                handle_run(config, context_manager, &tool_registry, &tool_engine, args).await?;
+                handle_run(config, context_manager, &tool_registry, &tool_engine, args).await
             }
             Commands::Shell(shell_args) => {
-                handle_shell(config, shell_args).await?;
+                handle_shell(config, shell_args).await
             }
         }
     } else {
         tracing::info!("No subcommand provided, entering interactive mode.");
         let api_client = ApiClient::new(config.clone())
             .context("Failed to create API client for interactive mode (check API key configuration)")?;
-        run_interactive_mode(config, api_client, context_manager, &tool_registry, &tool_engine).await?;
-    }
+        run_interactive_mode(config, api_client, context_manager, &tool_registry, &tool_engine).await
+    };
+
+    // Reverted: Removed TUI run loop and terminal restoration logic
 
     tracing::info!("Application finished");
-    Ok(())
+
+    // Return the command result directly
+    command_result.context("Command execution failed")
 }
